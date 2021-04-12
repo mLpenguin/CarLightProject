@@ -1,5 +1,6 @@
 #include <Adafruit_NeoPixel.h>
 
+#include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESPAsyncTCP.h>
@@ -9,7 +10,7 @@
 
 #include "index.h"
 
-#define CONTROLIPADDRESS "1.2.3.2" //Light controller ip address
+const String CONTROLIPADDRESS = "1.2.3.2"; //Light controller ip address //Has to be str const
 
 
 
@@ -58,19 +59,32 @@ void notFound(AsyncWebServerRequest *request)
   request->send(404, "text/plain", "404 Not found");
 }
 
-HTTPClient http;  //Declare an object of class HTTPClient
-String sendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
-{
-  //"http://"+
-  String sendIpAddress = CONTROLIPADDRESS;
-  String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(onOff)+"&"+PARAM_MODE+"="+String(m)+"&"+PARAM_BRIGHTNESS+"="+String(brightness)+"&"+PARAM_RED+"="+String(red)+"&"+PARAM_GREEN+"="+String(green)+"&"+PARAM_BLUE+"="+String(blue)+"&"+PARAM_DELAY+"="+String(d);
-  http.begin(urlRequest);  //Specify request destination
-  
-  int httpCode = http.GET();                                                                  //Send the request
-  http.end();   //Close connection
-  return urlRequest;
-}
 
+
+
+class SendHttp
+{
+  public:
+    int loop();
+    void triggerSendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d);
+
+  private:
+
+    HTTPClient http;  //Declare an object of class HTTPClient
+    
+    String sendHttp();
+
+    boolean sendMsg = false;
+    
+    uint8_t _OnOff = 0;
+    uint8_t _M = 0;
+    uint8_t _Brightness = 0;
+    uint8_t _Red = 0;
+    uint8_t _Green = 0;
+    uint8_t _Blue = 0;
+    int _D = 1000;
+  
+};
 class HeartBeat
 {
 public:
@@ -187,7 +201,7 @@ int Lights::setup()
 
 
 
-  setNextState(1, 1, 255, 180, 0, 255, 500);
+  setNextState(1, 1, 255, 180, 0, 255, 5000);
   return 1;
 }
 int Lights::loop()
@@ -317,6 +331,7 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       if (_setAllPos < sizeof(_outOne))
       {
         strip.setPixelColor(_outOne[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -330,6 +345,7 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       if (_setAllPos < sizeof(_outTwo))
       {
         strip.setPixelColor(_outTwo[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -343,6 +359,7 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       if (_setAllPos < sizeof(_outThree))
       {
         strip.setPixelColor(_outThree[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -357,8 +374,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 2;
         strip.setPixelColor(_inOne[_setAllPos], color);
+        yield();
         _setAllPos = 3;
         strip.setPixelColor(_inOne[_setAllPos], color);
+        yield();
         strip.show();
         _Delay = _Delay + 500;
         _setAllPos++;
@@ -367,8 +386,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 2;
         strip.setPixelColor(_inTwo[_setAllPos], color);
+        yield();
         _setAllPos = 3;
         strip.setPixelColor(_inTwo[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -376,8 +397,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 2;
         strip.setPixelColor(_inThree[_setAllPos], color);
+        yield();
         _setAllPos = 3;
         strip.setPixelColor(_inThree[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -392,8 +415,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 1;
         strip.setPixelColor(_inOne[_setAllPos], color);
+        yield();
         _setAllPos = 4;
         strip.setPixelColor(_inOne[_setAllPos], color);
+        yield();
         strip.show();
         _Delay = _Delay + 500;
         _setAllPos++;
@@ -402,8 +427,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 1;
         strip.setPixelColor(_inTwo[_setAllPos], color);
+        yield();
         _setAllPos = 4;
         strip.setPixelColor(_inTwo[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -411,8 +438,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 1;
         strip.setPixelColor(_inThree[_setAllPos], color);
+        yield();
         _setAllPos = 4;
         strip.setPixelColor(_inThree[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -427,8 +456,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 0;
         strip.setPixelColor(_inOne[_setAllPos], color);
+        yield();
         _setAllPos = 5;
         strip.setPixelColor(_inOne[_setAllPos], color);
+        yield();
         strip.show();
         _Delay = _Delay + 500;
         _setAllPos++;
@@ -437,8 +468,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 0;
         strip.setPixelColor(_inTwo[_setAllPos], color);
+        yield();
         _setAllPos = 5;
         strip.setPixelColor(_inTwo[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -446,8 +479,10 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 0;
         strip.setPixelColor(_inThree[_setAllPos], color);
+        yield();
         _setAllPos = 5;
         strip.setPixelColor(_inThree[_setAllPos], color);
+        yield();
         strip.show();
         _setAllPos++;
       }
@@ -578,9 +613,9 @@ void HeartBeat::recievedHeartbeat()
 }
 void HeartBeat::processHeartbeat()
 {
-  if (!_HeartBeatRecieved && !_LastHeartBeatRecieved)
+  if (!_HeartBeatRecieved && !_LastHeartBeatRecieved) //Missed 2 heartbeat messages turn off
   {
-    lights.setNextState(1, 1, lights.valueBrightness(), 0, 0, 0, 1000);
+    lights.setNextState(0, 1, lights.valueBrightness(), 0, 0, 0, 1000);
     lights.newCommand = true;
   }
 
@@ -603,7 +638,57 @@ int HeartBeat::loop()
 
 
 
+String SendHttp::sendHttp()
+{
+  //"http://"+
+  String sendIpAddress = CONTROLIPADDRESS;
+  String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(_OnOff)+"&"+PARAM_MODE+"="+String(_M)+"&"+PARAM_BRIGHTNESS+"="+String(_Brightness)+"&"+PARAM_RED+"="+String(_Red)+"&"+PARAM_GREEN+"="+String(_Green)+"&"+PARAM_BLUE+"="+String(_Blue)+"&"+PARAM_DELAY+"="+String(_D);
+  http.begin(urlRequest);  //Specify request destination
+  
+  int httpCode = http.GET();                                                                  //Send the request
+  http.end();   //Close connection
+  sendMsg = false;
+  return urlRequest;
+}
+
+void SendHttp::triggerSendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
+{
+  sendMsg = true;
+  _OnOff = onOff;
+  _M = m;
+  _Brightness = brightness;
+  _Red = red;
+  _Green = green;
+  _Blue = blue;
+  _D = d;
+  
+}
+
+int SendHttp::loop()
+{
+  if (sendMsg)
+  {
+    sendHttp();
+  }
+  return 1;
+}
+
+HTTPClient http;  //Declare an object of class HTTPClient
+String sendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
+{
+  //"http://"+
+  String sendIpAddress = CONTROLIPADDRESS;
+  String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(onOff)+"&"+PARAM_MODE+"="+String(m)+"&"+PARAM_BRIGHTNESS+"="+String(brightness)+"&"+PARAM_RED+"="+String(red)+"&"+PARAM_GREEN+"="+String(green)+"&"+PARAM_BLUE+"="+String(blue)+"&"+PARAM_DELAY+"="+String(d);
+  http.begin(urlRequest);  //Specify request destination
+  
+  int httpCode = http.GET();                                                                  //Send the request
+  http.end();   //Close connection
+  return urlRequest;
+}
+
+
 HeartBeat heartBeat;
+SendHttp sendhttp;
 
 void startOTA() 
 { // Start the OTA service
@@ -652,37 +737,47 @@ void setup()
 // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
   server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) 
   {
-    String onoff = "0";
-    String modee = "0";
-    String brightness = "0";
-    String red = "0";
-    String green = "0";
-    String blue = "0";
-    String delayy = "0";
 
     // GET input1 value on <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
     if (request->hasParam(PARAM_ONOFF) && request->hasParam(PARAM_MODE) && request->hasParam(PARAM_BRIGHTNESS) && request->hasParam(PARAM_RED) && request->hasParam(PARAM_GREEN) && request->hasParam(PARAM_BLUE) && request->hasParam(PARAM_DELAY)) 
     {
+
+      String sonoff = "0";
+      String smodee = "0";
+      String sbrightness = "0";
+      String sred = "0";
+      String sgreen = "0";
+      String sblue = "0";
+      String sdelayy = "0";
      
-      onoff = request->getParam(PARAM_ONOFF)->value();
-      modee = request->getParam(PARAM_MODE)->value();
-      brightness = request->getParam(PARAM_BRIGHTNESS)->value();
-      red = request->getParam(PARAM_RED)->value();
-      green = request->getParam(PARAM_GREEN)->value();
-      blue = request->getParam(PARAM_BLUE)->value();
-      delayy = request->getParam(PARAM_DELAY)->value();
+      sonoff = request->getParam(PARAM_ONOFF)->value();
+      smodee = request->getParam(PARAM_MODE)->value();
+      sbrightness = request->getParam(PARAM_BRIGHTNESS)->value();
+      sred = request->getParam(PARAM_RED)->value();
+      sgreen = request->getParam(PARAM_GREEN)->value();
+      sblue = request->getParam(PARAM_BLUE)->value();
+      sdelayy = request->getParam(PARAM_DELAY)->value();
 
-      sendHttp(onoff, modee, brightness, red, green, blue, delayy);
+      uint8_t onoff = sonoff.toInt();
+      uint8_t modee = smodee.toInt();
+      uint8_t brightness = sbrightness.toInt();
+      uint8_t red = sred.toInt();
+      uint8_t green = sgreen.toInt();
+      uint8_t blue = sblue.toInt();
+      uint8_t delayy = sdelayy.toInt();
 
-      
-      if ((onoff.toInt() == lights.valueOnOff()) && (modee.toInt() == lights.valueMode()) && (brightness.toInt() == lights.valueBrightness())&& (red.toInt() == lights.valueRed()) && (green.toInt() == lights.valueGreen()) && (blue.toInt() == lights.valueBlue()) && (delayy.toInt() == lights.valueDelay()))
+      sendhttp.triggerSendHttp(onoff, modee, brightness, red, green, blue, delayy);
+      //sendHttp(onoff, modee, brightness, red, green, blue, delayy);
+      //sendHttp(1, 1, 255, 255, 0, 180, 500);
+
+      if ((onoff == lights.valueOnOff()) && (modee == lights.valueMode()) && (brightness == lights.valueBrightness())&& (red == lights.valueRed()) && (green == lights.valueGreen()) && (blue == lights.valueBlue()) && (delayy == lights.valueDelay()))
       {
         heartBeat.recievedHeartbeat();
         request->send(200, "text/plain", "HEARTBEAT OK");
       }
       else
       {     
-        lights.setNextState(onoff.toInt(),modee.toInt(),brightness.toInt(),red.toInt(),green.toInt(),blue.toInt(),delayy.toInt());
+        lights.setNextState(onoff, modee, brightness, red, green, blue, delayy);
         lights.newCommand = true;
         request->send(200, "text/plain", "OK");
       }
@@ -764,5 +859,6 @@ void loop()
 {
   heartBeat.loop();//nned to be first for bootup
   lights.loop();
+  sendhttp.loop();
   ArduinoOTA.handle();                        // listen for OTA events
 }

@@ -41,7 +41,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(STRIPLENGTH, PIN_NEOPIXEL, NEO_GRB +
                   										  //Address usage log:
                   										  //0 - 11/28/19
 
-#define NODEIPADDRESS                 "1.2.3.1" //Light Node ip address
+const String NODEIPADDRESS = "1.2.3.1"; //Light Node ip address //Has to be str const
 
 
 #define PARAM_ONOFF         "of"
@@ -54,7 +54,14 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(STRIPLENGTH, PIN_NEOPIXEL, NEO_GRB +
 
 
 
+uint8_t stripBrightness = 255;
 
+
+
+void notFound(AsyncWebServerRequest *request) 
+{
+  request->send(404, "text/plain", "404 Not found");
+}
 
 
 HTTPClient http;  //Declare an object of class HTTPClient
@@ -227,8 +234,8 @@ HeartBeat heartBeat;
 OnOffButton onOffButton;
 ModeButton modeButton;
 BrightnessSwitch brightnessSwitch;
-Lights controllerLights(1);
-Lights nodeLights(0);
+Lights controllerLights(0);
+Lights nodeLights(1);
 Process process;
 
 void HeartBeat::sendHeartbeat()
@@ -489,7 +496,7 @@ void Process::setNextState()
 
   if (newCommand)
   {
-	  controllerLights.setNextState(onOff, m, brightness, r, g, b, d);
+	  controllerLights.setNextState(onOff, m, stripBrightness, r, g, b, d);
     sendHttp(onOff, m, brightness, r, g, b, d);
     if ((byte)readLastMode() != (byte)modeButtonMode)  //If last mode and current mode differnt, save to EEProm
     {
@@ -709,8 +716,11 @@ void setup()
       blue = request->getParam(PARAM_BLUE)->value();
       delayy = request->getParam(PARAM_DELAY)->value();
       
+      stripBrightness = brightness.toInt();
       
-      nodeLights.setNextState(onoff.toInt(),modee.toInt(),brightness.toInt(),red.toInt(),green.toInt(),blue.toInt(),delayy.toInt());
+      nodeLights.setNextState(onoff.toInt(),modee.toInt(),stripBrightness,red.toInt(),green.toInt(),blue.toInt(),delayy.toInt());
+      
+      
       request->send_P(200, "text/html", "OK");
       //nodeLights.newCommand = true;
       //heartBeat.recievedHeartbeat();
@@ -751,6 +761,12 @@ void setup()
     {
       request->send_P(200, "text/html", "ERROR");
     }
+  });
+
+  server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    request->send(200, "text/plain", "TRIGGER RESET OK");
+    ESP.restart();
   });
 
 
