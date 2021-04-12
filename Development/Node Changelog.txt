@@ -1,0 +1,19 @@
+//***************************************************************
+// UPDATE LOG | Date - Comment
+//
+// 12/3/19 - Inital file created. 
+// 12/13/19 - Added new RF24 Radio Class
+// 12/23/19 - Conversion back to MySensor Library. Changed to PA level high
+// 09/03/20 - Converted to ESP
+// 09/10/20 - Problem with setallone. Times out. possibly use yield()? 
+// 12/24/20 - Split into Developing. Updated heartbeat to send previous message
+// 04/12/21 - Update webpage to auto send, periodically send, read current state and overall visuals. Heartbeat changed to resend message. If same message recieved its heartbeat. 
+//	    - Updated SSID and IpAddr
+//
+//***************************************************************
+//
+//When uploading. Make shure connect to PRIVATE network
+//
+//Enable NetBIOS over IP? | IPv4 Config in adapter settings (advanced)
+//
+//***************************************************************

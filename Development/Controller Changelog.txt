@@ -1,0 +1,14 @@
+//***************************************************************
+// UPDATE LOG | Date - Comment
+//
+// 12/3/19 - Inital log created. Changed Light class (setnextstate)(added constructor), Added startup random delay. Memory issues 2396/2048
+// 12/13/19 - Added new RF24 Radio Class
+// 12/22/19 - Made light class smaller. Now can use mysensor without memory issue. Plan to split in order to continue development on RF24 lib without mysensor
+//				Error with RF24 libs? Doesnt even reach setup. idk what error is
+// 12/23/19 - Conversion back to MySensor Library. Changed to PA level high
+// 09/04/20 - Convert to ESP
+// 12/24/20 - Split into Developing. Updated heartbeat to send previous message
+// 04/12/21 - Include cabin light as well as node. Update APSSID and ipAddr. Added time aspect 
+//	      to auto dim when phone tells controller to dim.
+//
+//***************************************************************
