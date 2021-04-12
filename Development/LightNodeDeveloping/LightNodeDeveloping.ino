@@ -673,20 +673,6 @@ int SendHttp::loop()
   return 1;
 }
 
-HTTPClient http;  //Declare an object of class HTTPClient
-String sendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
-{
-  //"http://"+
-  String sendIpAddress = CONTROLIPADDRESS;
-  String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(onOff)+"&"+PARAM_MODE+"="+String(m)+"&"+PARAM_BRIGHTNESS+"="+String(brightness)+"&"+PARAM_RED+"="+String(red)+"&"+PARAM_GREEN+"="+String(green)+"&"+PARAM_BLUE+"="+String(blue)+"&"+PARAM_DELAY+"="+String(d);
-  http.begin(urlRequest);  //Specify request destination
-  
-  int httpCode = http.GET();                                                                  //Send the request
-  http.end();   //Close connection
-  return urlRequest;
-}
-
-
 HeartBeat heartBeat;
 SendHttp sendhttp;
 
@@ -780,24 +766,18 @@ void setup()
         lights.setNextState(onoff, modee, brightness, red, green, blue, delayy);
         lights.newCommand = true;
         request->send(200, "text/plain", "OK");
-      }
-
-
-      
-      
+      }      
     }
     else
     {
       request->send(200, "text/plain", "ERROR");
     }
-
-    
   });
-
 
   server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) 
   {
     request->send(200, "text/plain", "TRIGGER RESET OK");
+    yield();
     ESP.restart();
   });
 

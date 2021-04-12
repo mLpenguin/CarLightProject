@@ -766,6 +766,7 @@ void setup()
   server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) 
   {
     request->send(200, "text/plain", "TRIGGER RESET OK");
+    yield();
     ESP.restart();
   });
 
