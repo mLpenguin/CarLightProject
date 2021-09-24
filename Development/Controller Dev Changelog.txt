@@ -10,5 +10,6 @@
 // 12/24/20 - Split into Developing. Updated heartbeat to send previous message
 // 04/12/21 - Include cabin light as well as node. Update APSSID and ipAddr. Added time aspect 
 //	      to auto dim when phone tells controller to dim.
+// 04/23/21 - Changed ota to only be enabled on demand.
 //
 //***************************************************************

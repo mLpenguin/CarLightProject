@@ -12,7 +12,7 @@
 
 const String CONTROLIPADDRESS = "1.2.3.2"; //Light controller ip address //Has to be str const
 
-
+boolean USE_OTA = false;
 
 //Web socket: https://tttapa.github.io/ESP8266/Chap14%20-%20WebSocket.html
 
@@ -50,6 +50,7 @@ const char* PARAM_RED = "r";
 const char* PARAM_GREEN = "g";
 const char* PARAM_BLUE = "b";
 const char* PARAM_DELAY = "d";
+const char* PARAM_OTA = "enable";
 
 
 AsyncWebServer server(80);
@@ -201,7 +202,7 @@ int Lights::setup()
 
 
 
-  setNextState(1, 1, 255, 180, 0, 255, 5000);
+  setNextState(1, 1, 255, 180, 0, 255, 1000);
   return 1;
 }
 int Lights::loop()
@@ -302,8 +303,10 @@ void Lights::setOutside(uint8_t r, uint8_t g, uint8_t b)
   uint32_t color = strip.Color(r, g, b);
   for (uint16_t i = 0; i < sizeof(_outsideC); i++)
   {
+    
     strip.setPixelColor(_outsideC[i], color);
   }
+
   strip.show();
 }
 void Lights::setInside(uint8_t r, uint8_t g, uint8_t b)
@@ -311,6 +314,7 @@ void Lights::setInside(uint8_t r, uint8_t g, uint8_t b)
   uint32_t color = strip.Color(r, g, b);
   for (uint16_t i = 0; i < sizeof(_insideC); i++)
   {
+    
     strip.setPixelColor(_insideC[i], color);
   }
   strip.show();
@@ -331,7 +335,6 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       if (_setAllPos < sizeof(_outOne))
       {
         strip.setPixelColor(_outOne[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -345,7 +348,6 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       if (_setAllPos < sizeof(_outTwo))
       {
         strip.setPixelColor(_outTwo[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -359,7 +361,6 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       if (_setAllPos < sizeof(_outThree))
       {
         strip.setPixelColor(_outThree[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -374,10 +375,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 2;
         strip.setPixelColor(_inOne[_setAllPos], color);
-        yield();
         _setAllPos = 3;
         strip.setPixelColor(_inOne[_setAllPos], color);
-        yield();
         strip.show();
         _Delay = _Delay + 500;
         _setAllPos++;
@@ -386,10 +385,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 2;
         strip.setPixelColor(_inTwo[_setAllPos], color);
-        yield();
         _setAllPos = 3;
         strip.setPixelColor(_inTwo[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -397,10 +394,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 2;
         strip.setPixelColor(_inThree[_setAllPos], color);
-        yield();
         _setAllPos = 3;
         strip.setPixelColor(_inThree[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -415,10 +410,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 1;
         strip.setPixelColor(_inOne[_setAllPos], color);
-        yield();
         _setAllPos = 4;
         strip.setPixelColor(_inOne[_setAllPos], color);
-        yield();
         strip.show();
         _Delay = _Delay + 500;
         _setAllPos++;
@@ -427,10 +420,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 1;
         strip.setPixelColor(_inTwo[_setAllPos], color);
-        yield();
         _setAllPos = 4;
         strip.setPixelColor(_inTwo[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -438,10 +429,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 1;
         strip.setPixelColor(_inThree[_setAllPos], color);
-        yield();
         _setAllPos = 4;
         strip.setPixelColor(_inThree[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -456,10 +445,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 0;
         strip.setPixelColor(_inOne[_setAllPos], color);
-        yield();
         _setAllPos = 5;
         strip.setPixelColor(_inOne[_setAllPos], color);
-        yield();
         strip.show();
         _Delay = _Delay + 500;
         _setAllPos++;
@@ -468,10 +455,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 0;
         strip.setPixelColor(_inTwo[_setAllPos], color);
-        yield();
         _setAllPos = 5;
         strip.setPixelColor(_inTwo[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -479,10 +464,8 @@ void Lights::setAllone(uint8_t r, uint8_t g, uint8_t b)
       {
         _setAllPos = 0;
         strip.setPixelColor(_inThree[_setAllPos], color);
-        yield();
         _setAllPos = 5;
         strip.setPixelColor(_inThree[_setAllPos], color);
-        yield();
         strip.show();
         _setAllPos++;
       }
@@ -515,6 +498,7 @@ void Lights::setAlltwo(uint8_t r, uint8_t g, uint8_t b) //Outside, then inside
     case 0:
       if (_setAllPos < sizeof(_outOne))
       {
+        
         strip.setPixelColor(_outOne[_setAllPos], color);
         strip.setPixelColor(_outTwo[_setAllPos], color);
         strip.setPixelColor(_outThree[_setAllPos], color);
@@ -530,6 +514,7 @@ void Lights::setAlltwo(uint8_t r, uint8_t g, uint8_t b) //Outside, then inside
     case 1:
       if( _setAllPos > 0)
       {
+        
         _setAllPos--;
         strip.setPixelColor(_inOne[_setAllPos], color);
         strip.setPixelColor(_inTwo[_setAllPos], color);
@@ -615,7 +600,7 @@ void HeartBeat::processHeartbeat()
 {
   if (!_HeartBeatRecieved && !_LastHeartBeatRecieved) //Missed 2 heartbeat messages turn off
   {
-    lights.setNextState(0, 1, lights.valueBrightness(), 0, 0, 0, 1000);
+    lights.setNextState(0, 1, lights.valueBrightness(), 0, 0, 0, 5000);
     lights.newCommand = true;
   }
 
@@ -643,9 +628,10 @@ String SendHttp::sendHttp()
   //"http://"+
   String sendIpAddress = CONTROLIPADDRESS;
   String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(_OnOff)+"&"+PARAM_MODE+"="+String(_M)+"&"+PARAM_BRIGHTNESS+"="+String(_Brightness)+"&"+PARAM_RED+"="+String(_Red)+"&"+PARAM_GREEN+"="+String(_Green)+"&"+PARAM_BLUE+"="+String(_Blue)+"&"+PARAM_DELAY+"="+String(_D);
-  http.begin(urlRequest);  //Specify request destination
   
-  int httpCode = http.GET();                                                                  //Send the request
+  http.begin(urlRequest);  //Specify request destination
+  //int httpCode = http.GET();  //Send the request
+  http.GET(); //Send the request
   http.end();   //Close connection
   sendMsg = false;
   return urlRequest;
@@ -678,15 +664,23 @@ SendHttp sendhttp;
 
 void startOTA() 
 { // Start the OTA service
-  delay(5000); //Delay before connecting to wifi to start ota only if STA
+  //delay(5000); //Delay before connecting to wifi to start ota only if STA
   //ArduinoOTA.setPort(8266);
+
+  lights.setNextState(0, 1, lights.valueBrightness(), 0, 0, 0, 5000);
+  lights.newCommand = true;
+  lights.loop();
+  
   ArduinoOTA.setHostname(OTAName);
   //ArduinoOTA.setPassword(OTAPassword);
 
+  /*
   ArduinoOTA.onStart([]() 
   {
     lights.setNextState(0);
   });
+  */
+
 
   ArduinoOTA.begin();
 }
@@ -701,6 +695,7 @@ void setup()
   pinMode(3, FUNCTION_3); 
   //**************************************************
   lights.setup();
+
 
 /*
   WiFi.mode(WIFI_STA);
@@ -752,9 +747,10 @@ void setup()
       uint8_t blue = sblue.toInt();
       uint8_t delayy = sdelayy.toInt();
 
-      sendhttp.triggerSendHttp(onoff, modee, brightness, red, green, blue, delayy);
       //sendHttp(onoff, modee, brightness, red, green, blue, delayy);
       //sendHttp(1, 1, 255, 255, 0, 180, 500);
+
+      sendhttp.triggerSendHttp(onoff, modee, brightness, red, green, blue, delayy);
 
       if ((onoff == lights.valueOnOff()) && (modee == lights.valueMode()) && (brightness == lights.valueBrightness())&& (red == lights.valueRed()) && (green == lights.valueGreen()) && (blue == lights.valueBlue()) && (delayy == lights.valueDelay()))
       {
@@ -762,7 +758,7 @@ void setup()
         request->send(200, "text/plain", "HEARTBEAT OK");
       }
       else
-      {     
+      { 
         lights.setNextState(onoff, modee, brightness, red, green, blue, delayy);
         lights.newCommand = true;
         request->send(200, "text/plain", "OK");
@@ -779,6 +775,22 @@ void setup()
     request->send(200, "text/plain", "TRIGGER RESET OK");
     yield();
     ESP.restart();
+  });
+
+
+  //1.2.3.1/ota?enable=1
+  server.on("/ota", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    if (request->hasParam(PARAM_OTA))
+    {
+        USE_OTA=true;
+        startOTA();
+        request->send(200, "text/plain", "OTA ENABLED");
+    }
+    else
+    {
+      request->send(200, "text/plain", String(USE_OTA).c_str());
+    }
   });
 
   server.on("/value", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -829,16 +841,24 @@ void setup()
   
   // Start server
   server.begin();
-  startOTA();
   //lights.setNextState(0);
   heartBeat.setup();
   
 }
 
+
+
+
 void loop() 
 {
-  heartBeat.loop();//nned to be first for bootup
-  lights.loop();
-  sendhttp.loop();
-  ArduinoOTA.handle();                        // listen for OTA events
+  if (USE_OTA)
+  {
+    ArduinoOTA.handle();  // listen for OTA events
+  }
+  else
+  {
+    heartBeat.loop();//nned to be first for bootup
+    lights.loop();
+    sendhttp.loop();
+  }
 }

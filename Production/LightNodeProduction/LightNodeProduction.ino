@@ -1,22 +1,6 @@
-//***************************************************************
-// UPDATE LOG | Date - Comment
-//
-// 12/3/19 - Inital file created. 
-// 12/13/19 - Added new RF24 Radio Class
-// 12/23/19 - Conversion back to MySensor Library. Changed to PA level high
-// 09/03/20 - Converted to ESP
-// 09/10/20 - Problem with setallone. Times out. possibly use yield()? 
-//
-//***************************************************************
-//
-//When uploading. Make shure connect to PRIVATE network
-//
-//Enable NetBIOS over IP
-//
-//***************************************************************
-
 #include <Adafruit_NeoPixel.h>
 
+#include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESPAsyncTCP.h>
@@ -26,23 +10,23 @@
 
 #include "index.h"
 
+const String CONTROLIPADDRESS = "1.2.3.2"; //Light controller ip address //Has to be str const
 
-
+boolean USE_OTA = false;
 
 //Web socket: https://tttapa.github.io/ESP8266/Chap14%20-%20WebSocket.html
 
 //#ifndef APSSID
-#define APSSID "Im a Car Morty! Im Car RICK"
+#define APSSID "Im a Car Morty! Im Car RICK!"
 #define APPSK  "thereisnopassword"
 //#endif
 
 const char *ssid = APSSID;
 const char *password = APPSK;
 
-IPAddress local_IP(172,20,48,25);
-IPAddress gateway(172,20,48,1);
+IPAddress local_IP(1,2,3,1);
+IPAddress gateway(1,2,3,0);
 IPAddress subnet(255,255,255,0);
-IPAddress dns(8, 8, 8, 8);  //DNS
 
 
 //Define Pin Usage
@@ -66,6 +50,7 @@ const char* PARAM_RED = "r";
 const char* PARAM_GREEN = "g";
 const char* PARAM_BLUE = "b";
 const char* PARAM_DELAY = "d";
+const char* PARAM_OTA = "enable";
 
 
 AsyncWebServer server(80);
@@ -77,6 +62,30 @@ void notFound(AsyncWebServerRequest *request)
 
 
 
+
+class SendHttp
+{
+  public:
+    int loop();
+    void triggerSendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d);
+
+  private:
+
+    HTTPClient http;  //Declare an object of class HTTPClient
+    
+    String sendHttp();
+
+    boolean sendMsg = false;
+    
+    uint8_t _OnOff = 0;
+    uint8_t _M = 0;
+    uint8_t _Brightness = 0;
+    uint8_t _Red = 0;
+    uint8_t _Green = 0;
+    uint8_t _Blue = 0;
+    int _D = 1000;
+  
+};
 class HeartBeat
 {
 public:
@@ -193,7 +202,7 @@ int Lights::setup()
 
 
 
-  setNextState(1, 1, 180, 0, 255, 150, 500);
+  setNextState(1, 1, 255, 180, 0, 255, 1000);
   return 1;
 }
 int Lights::loop()
@@ -294,8 +303,10 @@ void Lights::setOutside(uint8_t r, uint8_t g, uint8_t b)
   uint32_t color = strip.Color(r, g, b);
   for (uint16_t i = 0; i < sizeof(_outsideC); i++)
   {
+    
     strip.setPixelColor(_outsideC[i], color);
   }
+
   strip.show();
 }
 void Lights::setInside(uint8_t r, uint8_t g, uint8_t b)
@@ -303,6 +314,7 @@ void Lights::setInside(uint8_t r, uint8_t g, uint8_t b)
   uint32_t color = strip.Color(r, g, b);
   for (uint16_t i = 0; i < sizeof(_insideC); i++)
   {
+    
     strip.setPixelColor(_insideC[i], color);
   }
   strip.show();
@@ -486,6 +498,7 @@ void Lights::setAlltwo(uint8_t r, uint8_t g, uint8_t b) //Outside, then inside
     case 0:
       if (_setAllPos < sizeof(_outOne))
       {
+        
         strip.setPixelColor(_outOne[_setAllPos], color);
         strip.setPixelColor(_outTwo[_setAllPos], color);
         strip.setPixelColor(_outThree[_setAllPos], color);
@@ -501,6 +514,7 @@ void Lights::setAlltwo(uint8_t r, uint8_t g, uint8_t b) //Outside, then inside
     case 1:
       if( _setAllPos > 0)
       {
+        
         _setAllPos--;
         strip.setPixelColor(_inOne[_setAllPos], color);
         strip.setPixelColor(_inTwo[_setAllPos], color);
@@ -584,9 +598,9 @@ void HeartBeat::recievedHeartbeat()
 }
 void HeartBeat::processHeartbeat()
 {
-  if (!_HeartBeatRecieved && !_LastHeartBeatRecieved)
+  if (!_HeartBeatRecieved && !_LastHeartBeatRecieved) //Missed 2 heartbeat messages turn off
   {
-    lights.setNextState(1, 1, lights.valueBrightness(), 0, 0, 0, 1000);
+    lights.setNextState(0, 1, lights.valueBrightness(), 0, 0, 0, 5000);
     lights.newCommand = true;
   }
 
@@ -609,19 +623,64 @@ int HeartBeat::loop()
 
 
 
+String SendHttp::sendHttp()
+{
+  //"http://"+
+  String sendIpAddress = CONTROLIPADDRESS;
+  String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(_OnOff)+"&"+PARAM_MODE+"="+String(_M)+"&"+PARAM_BRIGHTNESS+"="+String(_Brightness)+"&"+PARAM_RED+"="+String(_Red)+"&"+PARAM_GREEN+"="+String(_Green)+"&"+PARAM_BLUE+"="+String(_Blue)+"&"+PARAM_DELAY+"="+String(_D);
+  
+  http.begin(urlRequest);  //Specify request destination
+  //int httpCode = http.GET();  //Send the request
+  http.GET(); //Send the request
+  http.end();   //Close connection
+  sendMsg = false;
+  return urlRequest;
+}
+
+void SendHttp::triggerSendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
+{
+  sendMsg = true;
+  _OnOff = onOff;
+  _M = m;
+  _Brightness = brightness;
+  _Red = red;
+  _Green = green;
+  _Blue = blue;
+  _D = d;
+  
+}
+
+int SendHttp::loop()
+{
+  if (sendMsg)
+  {
+    sendHttp();
+  }
+  return 1;
+}
+
 HeartBeat heartBeat;
+SendHttp sendhttp;
 
 void startOTA() 
 { // Start the OTA service
-  delay(5000); //Delay before connecting to wifi to start ota only if STA
+  //delay(5000); //Delay before connecting to wifi to start ota only if STA
   //ArduinoOTA.setPort(8266);
+
+  lights.setNextState(0, 1, lights.valueBrightness(), 0, 0, 0, 5000);
+  lights.newCommand = true;
+  lights.loop();
+  
   ArduinoOTA.setHostname(OTAName);
   //ArduinoOTA.setPassword(OTAPassword);
 
+  /*
   ArduinoOTA.onStart([]() 
   {
     lights.setNextState(0);
   });
+  */
+
 
   ArduinoOTA.begin();
 }
@@ -636,6 +695,7 @@ void setup()
   pinMode(3, FUNCTION_3); 
   //**************************************************
   lights.setup();
+
 
 /*
   WiFi.mode(WIFI_STA);
@@ -658,46 +718,79 @@ void setup()
 // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
   server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) 
   {
-    String onoff = "0";
-    String modee = "0";
-    String brightness = "0";
-    String red = "0";
-    String green = "0";
-    String blue = "0";
-    String delayy = "0";
 
     // GET input1 value on <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
     if (request->hasParam(PARAM_ONOFF) && request->hasParam(PARAM_MODE) && request->hasParam(PARAM_BRIGHTNESS) && request->hasParam(PARAM_RED) && request->hasParam(PARAM_GREEN) && request->hasParam(PARAM_BLUE) && request->hasParam(PARAM_DELAY)) 
     {
-      onoff = request->getParam(PARAM_ONOFF)->value();
-      if (onoff.toInt() == 3)
+
+      String sonoff = "0";
+      String smodee = "0";
+      String sbrightness = "0";
+      String sred = "0";
+      String sgreen = "0";
+      String sblue = "0";
+      String sdelayy = "0";
+     
+      sonoff = request->getParam(PARAM_ONOFF)->value();
+      smodee = request->getParam(PARAM_MODE)->value();
+      sbrightness = request->getParam(PARAM_BRIGHTNESS)->value();
+      sred = request->getParam(PARAM_RED)->value();
+      sgreen = request->getParam(PARAM_GREEN)->value();
+      sblue = request->getParam(PARAM_BLUE)->value();
+      sdelayy = request->getParam(PARAM_DELAY)->value();
+
+      uint8_t onoff = sonoff.toInt();
+      uint8_t modee = smodee.toInt();
+      uint8_t brightness = sbrightness.toInt();
+      uint8_t red = sred.toInt();
+      uint8_t green = sgreen.toInt();
+      uint8_t blue = sblue.toInt();
+      uint8_t delayy = sdelayy.toInt();
+
+      //sendHttp(onoff, modee, brightness, red, green, blue, delayy);
+      //sendHttp(1, 1, 255, 255, 0, 180, 500);
+
+      sendhttp.triggerSendHttp(onoff, modee, brightness, red, green, blue, delayy);
+
+      if ((onoff == lights.valueOnOff()) && (modee == lights.valueMode()) && (brightness == lights.valueBrightness())&& (red == lights.valueRed()) && (green == lights.valueGreen()) && (blue == lights.valueBlue()) && (delayy == lights.valueDelay()))
       {
         heartBeat.recievedHeartbeat();
+        request->send(200, "text/plain", "HEARTBEAT OK");
       }
       else
-      {     
-        modee = request->getParam(PARAM_MODE)->value();
-        brightness = request->getParam(PARAM_BRIGHTNESS)->value();
-        red = request->getParam(PARAM_RED)->value();
-        green = request->getParam(PARAM_GREEN)->value();
-        blue = request->getParam(PARAM_BLUE)->value();
-        delayy = request->getParam(PARAM_DELAY)->value();
-        
-        
-        lights.setNextState(onoff.toInt(),modee.toInt(),brightness.toInt(),red.toInt(),green.toInt(),blue.toInt(),delayy.toInt());
+      { 
+        lights.setNextState(onoff, modee, brightness, red, green, blue, delayy);
         lights.newCommand = true;
-      }
-
-
-      
-      request->send(200, "text/plain", "OK");
+        request->send(200, "text/plain", "OK");
+      }      
     }
     else
     {
       request->send(200, "text/plain", "ERROR");
     }
+  });
 
-    
+  server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    request->send(200, "text/plain", "TRIGGER RESET OK");
+    yield();
+    ESP.restart();
+  });
+
+
+  //1.2.3.1/ota?enable=1
+  server.on("/ota", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    if (request->hasParam(PARAM_OTA))
+    {
+        USE_OTA=true;
+        startOTA();
+        request->send(200, "text/plain", "OTA ENABLED");
+    }
+    else
+    {
+      request->send(200, "text/plain", String(USE_OTA).c_str());
+    }
   });
 
   server.on("/value", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -739,7 +832,7 @@ void setup()
     }
     else
     {
-      request->send(200, "text/plain", "ERROR");
+      request->send(200, "text/plain", "ERROR. REQUEST NOT FOUND");
     }
     
   });
@@ -748,15 +841,24 @@ void setup()
   
   // Start server
   server.begin();
-  startOTA();
   //lights.setNextState(0);
   heartBeat.setup();
   
 }
 
+
+
+
 void loop() 
 {
-  heartBeat.loop();//nned to be first for bootup
-  lights.loop();
-  ArduinoOTA.handle();                        // listen for OTA events
+  if (USE_OTA)
+  {
+    ArduinoOTA.handle();  // listen for OTA events
+  }
+  else
+  {
+    heartBeat.loop();//nned to be first for bootup
+    lights.loop();
+    sendhttp.loop();
+  }
 }

@@ -11,7 +11,7 @@
 //            heartbeat). 
 //	    - Updated SSID and IpAddr
 //	    - Improved webpage. Added autosend and autoread options. Change bg to reflect color choice. Added read and send buttons. Improved overall visuals of webpage
-//          
+// 04/23/21 - Changed ota to only be enabled on demand. Potental power issues as node resets sometimes.
 //
 //***************************************************************
 // Current Issues:
@@ -24,6 +24,7 @@
 //
 //When uploading. Make shure connect to PRIVATE network
 //
-//Enable NetBIOS over IP? (Just change it triggers something) | IPv4 Config in adapter settings (advanced) | Enable and disable wifi adapter
+// Disable windwos firewall
+// Enable NetBIOS over IP? (Just change it triggers something) | IPv4 Config in adapter settings (advanced) | Enable and disable wifi adapter
 //
 //***************************************************************

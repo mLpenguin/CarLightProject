@@ -18,6 +18,8 @@
 /* Set these to your desired credentials. */
 const char *OTAName = "cabincontrolleresp";           // A name and a password for the OTA servic
 
+boolean USE_OTA = false;
+
 IPAddress local_IP(1,2,3,2);
 IPAddress gateway(1,2,3,0);
 IPAddress subnet(255,255,255,0);
@@ -51,10 +53,16 @@ const String NODEIPADDRESS = "1.2.3.1"; //Light Node ip address //Has to be str 
 #define PARAM_GREEN         "g"
 #define PARAM_BLUE          "b"
 #define PARAM_DELAY         "d"
+const char* PARAM_OTA = "enable";
 
 
 
-uint8_t stripBrightness = 255;
+int stripBrightness = 255; //force set in light.setBrightness()
+
+void SetStripBrightness(int bright)
+{
+  stripBrightness = bright;
+}
 
 
 
@@ -64,16 +72,23 @@ void notFound(AsyncWebServerRequest *request)
 }
 
 
-HTTPClient http;  //Declare an object of class HTTPClient
+
 String sendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
 {
+    
+  HTTPClient http;  //Declare an object of class HTTPClient    
   //"http://"+
   String sendIpAddress = NODEIPADDRESS;
   String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(onOff)+"&"+PARAM_MODE+"="+String(m)+"&"+PARAM_BRIGHTNESS+"="+String(brightness)+"&"+PARAM_RED+"="+String(red)+"&"+PARAM_GREEN+"="+String(green)+"&"+PARAM_BLUE+"="+String(blue)+"&"+PARAM_DELAY+"="+String(d);
-  http.begin(urlRequest);  //Specify request destination
   
-  int httpCode = http.GET();                                                                  //Send the request
-  http.end();   //Close connection
+  if (WiFi.status() == WL_CONNECTED) 
+  { //Check WiFi connection status
+    http.begin(urlRequest);  //Specify request destination
+    //int httpCode = http.GET(); //Send the request
+    http.GET(); //Send the request
+    http.end();   //Close connection
+  }
+    
   return urlRequest;
 }
 
@@ -85,14 +100,20 @@ class HeartBeat
 public:
   int setup();
   int loop();
+  void recievedHeartbeat();
 
   //Varables
 
 private:
   void sendHeartbeat();
+  
+  void processHeartbeat();
+
+  boolean _HeartBeatRecieved = true;
+  boolean _LastHeartBeatRecieved = false;
 
   //Varables
-  const uint16_t _Delay = 10 * 1000;  //Read sensors
+  const uint16_t _Delay = 5 * 1000;  //Read sensors
   uint8_t _CurrentValue = 0;
   uint8_t _LastValue = 0;
   unsigned long _LastRun = 0;
@@ -211,13 +232,16 @@ public:
 	uint8_t b = 0;
 	int d = 0;
 
+
+  uint8_t _Brightness = 1;
+
 private:
   void setNextState();
   void writeCurrentMode(byte mode);
 
   boolean newCommand = true;
 
-  uint8_t _Brightness = 1;
+  
 
   String nodeIpAddress = NODEIPADDRESS;
   const uint8_t _MaxBrightness = 255;
@@ -242,6 +266,21 @@ void HeartBeat::sendHeartbeat()
 {
   sendHttp(process.onOff, process.m, process.brightness, process.r, process.g, process.b, process.d);
 }
+void HeartBeat::recievedHeartbeat()
+{
+  _HeartBeatRecieved = true;
+}
+void HeartBeat::processHeartbeat()
+{
+  if (!_HeartBeatRecieved && !_LastHeartBeatRecieved) //Missed 2 heartbeat messages turn off
+  {
+    nodeLights.setNextState(0, 1, stripBrightness, 0, 0, 0, 5000);
+    //lights.newCommand = true;
+  }
+
+  _LastHeartBeatRecieved = _HeartBeatRecieved;
+  _HeartBeatRecieved = false;
+}
 int HeartBeat::setup()
 {
   return 1;
@@ -251,10 +290,11 @@ int HeartBeat::loop()
   //Serial.println(millis() - _LastRun);
   if ((millis() - _LastRun) >= _Delay)
   {
+    processHeartbeat();
     sendHeartbeat();
     _LastRun = millis();
   }
-
+  
   return 1;
 }
 
@@ -359,6 +399,8 @@ void BrightnessSwitch::Read()
 {
 	int BrightnessValue = digitalRead(PIN_BRIGHTNESSSWITCH);
 
+
+  
 	if (BrightnessValue == _LastValue && _CurrentValue != BrightnessValue)
 	{
 
@@ -427,6 +469,7 @@ void Process::setNewCommand()
 }
 void Process::setBrightness(uint8_t bright)
 {
+  
   _Brightness = bright;
 }
 void Process::setNextState()
@@ -439,7 +482,7 @@ void Process::setNextState()
 
 	if (onOff) //Turn on lights
 	{
-		if (_Brightness)  //Set brightness
+		if (_Brightness == 1)  //Set brightness
 		{
 			brightness = _MaxBrightness;
 		}
@@ -496,7 +539,7 @@ void Process::setNextState()
 
   if (newCommand)
   {
-	  controllerLights.setNextState(onOff, m, stripBrightness, r, g, b, d);
+	  
     sendHttp(onOff, m, brightness, r, g, b, d);
     if ((byte)readLastMode() != (byte)modeButtonMode)  //If last mode and current mode differnt, save to EEProm
     {
@@ -505,7 +548,7 @@ void Process::setNextState()
     //writeCurrentMode((byte)modeButtonMode);
   }
  
-
+  controllerLights.setNextState(onOff, m, stripBrightness, r, g, b, d);
 
   
   newCommand = false;
@@ -628,7 +671,8 @@ void Lights::setAll(uint8_t r, uint8_t g, uint8_t b)
 }
 void Lights::setBrightness(uint8_t brightness)
 {
-  strip.setBrightness(brightness);
+  strip.setBrightness(stripBrightness); //Dont Care about waht it should be.
+   
   //strip.show();
 }
 uint32_t Lights::Wheel(byte WheelPos)
@@ -651,10 +695,23 @@ uint32_t Lights::Wheel(byte WheelPos)
 
 void startOTA() 
 { // Start the OTA service
-  delay(5 *1000); //Delay before connecting to wifi to start ota only if STA
+  //delay(5000); //Delay before connecting to wifi to start ota only if STA
   //ArduinoOTA.setPort(8266);
+
+  controllerLights.setNextState(0, 1, stripBrightness, 0, 0, 0, 5000);
+  controllerLights.loop();
+  nodeLights.setNextState(0, 1, stripBrightness, 0, 0, 0, 5000);
+  nodeLights.loop();
+  
   ArduinoOTA.setHostname(OTAName);
   //ArduinoOTA.setPassword(OTAPassword);
+
+  /*
+  ArduinoOTA.onStart([]() 
+  {
+    lights.setNextState(0);
+  });
+  */
 
   ArduinoOTA.begin();
 }
@@ -662,7 +719,7 @@ void startOTA()
 AsyncWebServer server(80);
 void setup()
 {
-  EEPROM.begin(4);
+  EEPROM.begin(4); //4 = size. min is  bytes
   //********** CHANGE PIN FUNCTION  TO GPIO **********
   //GPIO 1 (TX) swap the pin to a GPIO.
   pinMode(1, FUNCTION_3); 
@@ -675,10 +732,11 @@ void setup()
   WiFi.begin(APSSID,APPSK); //Connect to WiFi
   while (WiFi.waitForConnectResult() != WL_CONNECTED) 
   {
-    Serial.println("Connection Failed! Rebooting...");
+    //Serial.println("Connection Failed! Rebooting...");
     delay(10*1000);
     ESP.restart();
   }
+  
   //WiFi.begin("W04-006OAKPL","A246801234567890#"); //Connect to WiFi
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -686,12 +744,15 @@ void setup()
   });
   server.on("/onoff", HTTP_GET, [](AsyncWebServerRequest *request){
   request->send_P(200, "text/html", String(onOffButton.getOnOff()).c_str());
-});
+  });
   server.on("/bright", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/html", String(brightnessSwitch.getOnOff()).c_str());
-});
+  request->send_P(200, "text/html", String(stripBrightness).c_str());
+  });
   server.on("/mode", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", String(modeButton.getMode()).c_str());
+  });
+  server.on("/test", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", String(stripBrightness).c_str());
   });
 
 // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
@@ -716,20 +777,20 @@ void setup()
       blue = request->getParam(PARAM_BLUE)->value();
       delayy = request->getParam(PARAM_DELAY)->value();
       
-      stripBrightness = brightness.toInt();
+      SetStripBrightness(brightness.toInt());
+      //process.setNewCommand();
       
+      heartBeat.recievedHeartbeat();
       nodeLights.setNextState(onoff.toInt(),modee.toInt(),stripBrightness,red.toInt(),green.toInt(),blue.toInt(),delayy.toInt());
       
       
       request->send_P(200, "text/html", "OK");
-      //nodeLights.newCommand = true;
-      //heartBeat.recievedHeartbeat();
     }
   });
 
 
   // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
-  server.on("/rtc", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  server.on("/time", HTTP_GET, [] (AsyncWebServerRequest *request) 
   {
     String Bright;
     String Time;
@@ -763,6 +824,23 @@ void setup()
     }
   });
 
+  //1.2.3.2/ota?enable=1
+  server.on("/ota", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    if (request->hasParam(PARAM_OTA))
+    {
+
+        USE_OTA=true;
+        startOTA();
+        request->send(200, "text/plain", "OTA ENABLED");
+      
+    }
+    else
+    {
+      request->send(200, "text/plain", String(USE_OTA).c_str());
+    }
+  });
+
   server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) 
   {
     request->send(200, "text/plain", "TRIGGER RESET OK");
@@ -781,17 +859,36 @@ void setup()
   nodeLights.setup();
 	process.setup();
   heartBeat.setup();
-  startOTA();
 }
+
+
+
+unsigned long previousWiFiMillis = 0;
+int intervalWiFi = 10 * 1000;
 
 void loop()
 {
-	brightnessSwitch.loop();
-	modeButton.loop();
-	onOffButton.loop();
-  controllerLights.loop();
-  nodeLights.loop();
-	process.loop();
-  heartBeat.loop();
-  ArduinoOTA.handle();                        // listen for OTA events
+  if (USE_OTA)
+  {
+    ArduinoOTA.handle();                        // listen for OTA events
+  }
+  else
+  {
+  	brightnessSwitch.loop();
+  	modeButton.loop();
+  	onOffButton.loop();
+    controllerLights.loop();
+    nodeLights.loop();
+  	process.loop();
+    heartBeat.loop();
+  }
+
+  /*
+  // if WiFi is down, try reconnecting every CHECK_WIFI_TIME seconds
+  if ((WiFi.status() != WL_CONNECTED) && (millis() - previousWiFiMillis >=intervalWiFi)) 
+  {
+    ////ESP.restart();
+    previousWiFiMillis = millis();
+  }
+  */
 }

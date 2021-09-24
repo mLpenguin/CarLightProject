@@ -1,13 +1,3 @@
-//***************************************************************
-// UPDATE LOG | Date - Comment
-//
-// 12/3/19 - Inital log created. Changed Light class (setnextstate)(added constructor), Added startup random delay. Memory issues 2396/2048
-// 12/13/19 - Added new RF24 Radio Class
-// 12/22/19 - Made light class smaller. Now can use mysensor without memory issue. Plan to split in order to continue development on RF24 lib without mysensor
-//				Error with RF24 libs? Doesnt even reach setup. idk what error is
-// 12/23/19 - Conversion back to MySensor Library. Changed to PA level high
-// 09/04/20 - Convert to ESP
-//***************************************************************
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
@@ -21,64 +11,84 @@
 #include <ArduinoOTA.h>
 
 //#ifndef APSSID
-#define APSSID "Im a Router Morty! Im WiFi RICK"
+#define APSSID "Im a Car Morty! Im Car RICK!"
 #define APPSK  "thereisnopassword"
 //#endif
 
 /* Set these to your desired credentials. */
-const char *OTAName = "cabincontrolleresp";           // A name and a password for the OTA service
-//const String frontNodeIp = "172.20.48.25";
+const char *OTAName = "cabincontrolleresp";           // A name and a password for the OTA servic
 
+boolean USE_OTA = false;
 
-IPAddress local_IP(172,20,48,26);
-IPAddress gateway(172,20,48,1);
+IPAddress local_IP(1,2,3,2);
+IPAddress gateway(1,2,3,0);
 IPAddress subnet(255,255,255,0);
-IPAddress dns(8, 8, 8, 8);  //DNS
-
-#define PIN_ONOFFBUTTON				        2
-#define PIN_MODESELECTBUTTON	        0
-#define PIN_BRIGHTNESSSWITCH	        1 //TX
-
-#define PIN_NEOPIXEL					        3 //RX
-#define STRIPLENGTH						        2
-#define NUMOFSTATES						        4
-
-#define CONTROLLERLIGHTMINBRIGHTNESS	20
-#define CONTROLLERLIGHTMAXBRIGHTNESS	150
-
-#define EEPROMADDRESS				         	0 //EEPROM.length() get eeprom address range
-                  										  //Address usage log:
-                  										  //0 - 11/28/19
-
-#define NODEIPADDRESS                 "172.20.48.25"
-    //Light Node ip address
-      //On ap its 172.20.48.25
-      //On Oakpl its 172.20.48.104
 
 
-const String PARAM_ONOFF = "of";
-const String PARAM_MODE = "m";
-const String PARAM_BRIGHTNESS = "br";
-const String PARAM_RED = "r";
-const String PARAM_GREEN = "g";
-const String PARAM_BLUE = "b";
-const String PARAM_DELAY = "d";
+#define PIN_ONOFFBUTTON                2
+#define PIN_MODESELECTBUTTON          0
+#define PIN_BRIGHTNESSSWITCH          1 //TX
+
+#define PIN_NEOPIXEL                  3 //RX
+#define STRIPLENGTH                   2
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(STRIPLENGTH, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 
+#define NUMOFSTATES                   4
 
+#define CONTROLLERLIGHTMINBRIGHTNESS  20
+#define CONTROLLERLIGHTMAXBRIGHTNESS  150
+
+#define EEPROMADDRESS                 0 //EEPROM.length() get eeprom address range
+                                        //Address usage log:
+                                        //0 - 11/28/19
+
+const String NODEIPADDRESS = "1.2.3.1"; //Light Node ip address //Has to be str const
+
+
+#define PARAM_ONOFF         "of"
+#define PARAM_MODE          "m"
+#define PARAM_BRIGHTNESS    "br"
+#define PARAM_RED           "r"
+#define PARAM_GREEN         "g"
+#define PARAM_BLUE          "b"
+#define PARAM_DELAY         "d"
+const char* PARAM_OTA = "enable";
 
 
 
-HTTPClient http;  //Declare an object of class HTTPClient
+int stripBrightness = 255; //force set in light.setBrightness()
+
+void SetStripBrightness(int bright)
+{
+  stripBrightness = bright;
+}
+
+
+
+void notFound(AsyncWebServerRequest *request) 
+{
+  request->send(404, "text/plain", "404 Not found");
+}
+
+
+
 String sendHttp(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d)
 {
+    
+  HTTPClient http;  //Declare an object of class HTTPClient    
   //"http://"+
-  String nodeIpAddress = "172.20.48.25";
-  String urlRequest = "http://"+nodeIpAddress+"/set?"+PARAM_ONOFF+"="+String(onOff)+"&"+PARAM_MODE+"="+String(m)+"&"+PARAM_BRIGHTNESS+"="+String(brightness)+"&"+PARAM_RED+"="+String(red)+"&"+PARAM_GREEN+"="+String(green)+"&"+PARAM_BLUE+"="+String(blue)+"&"+PARAM_DELAY+"="+String(d);
-  http.begin(urlRequest);  //Specify request destination
+  String sendIpAddress = NODEIPADDRESS;
+  String urlRequest = "http://"+sendIpAddress+"/set?"+PARAM_ONOFF+"="+String(onOff)+"&"+PARAM_MODE+"="+String(m)+"&"+PARAM_BRIGHTNESS+"="+String(brightness)+"&"+PARAM_RED+"="+String(red)+"&"+PARAM_GREEN+"="+String(green)+"&"+PARAM_BLUE+"="+String(blue)+"&"+PARAM_DELAY+"="+String(d);
   
-  int httpCode = http.GET();                                                                  //Send the request
-  http.end();   //Close connection
+  if (WiFi.status() == WL_CONNECTED) 
+  { //Check WiFi connection status
+    http.begin(urlRequest);  //Specify request destination
+    //int httpCode = http.GET(); //Send the request
+    http.GET(); //Send the request
+    http.end();   //Close connection
+  }
+    
   return urlRequest;
 }
 
@@ -90,14 +100,20 @@ class HeartBeat
 public:
   int setup();
   int loop();
+  void recievedHeartbeat();
 
   //Varables
 
 private:
   void sendHeartbeat();
   
+  void processHeartbeat();
+
+  boolean _HeartBeatRecieved = true;
+  boolean _LastHeartBeatRecieved = false;
+
   //Varables
-  const uint16_t _Delay = 2 * 1000;  //Read sensors
+  const uint16_t _Delay = 5 * 1000;  //Read sensors
   uint8_t _CurrentValue = 0;
   uint8_t _LastValue = 0;
   unsigned long _LastRun = 0;
@@ -105,68 +121,69 @@ private:
 class OnOffButton
 {
 public:
-	int setup();
-	int loop();
-	int getOnOff();
+  int setup();
+  int loop();
+  int getOnOff();
 
-	//Varables
+  //Varables
 
 private:
-	void Read();
+  void Read();
 
-	//Varables
-	const uint16_t _Delay = 400;  //Read sensors
-	uint8_t _CurrentValue = 0;
-	uint8_t _LastValue = 0;
-	unsigned long _LastRun = 0;
+  //Varables
+  const uint16_t _Delay = 400;  //Read sensors
+  uint8_t _CurrentValue = 0;
+  uint8_t _LastValue = 0;
+  unsigned long _LastRun = 0;
 };
 class ModeButton
 {
 public:
-	int setup();
-	int loop();
-	int getMode();
+  int setup();
+  int loop();
+  int getMode();
 
 private:
-	void Read();
+  void Read();
 
-	//Varables
-	//uint8_t _CurrentValue = 1;
-	uint8_t _LastValue = 0;
-	uint8_t _ModeCounter = 0;
-	unsigned long _LastRun = 0;
-	const uint16_t _Delay = 200; //Read sensors
+  //Varables
+  //uint8_t _CurrentValue = 1;
+  uint8_t _LastValue = 0;
+  uint8_t _ModeCounter = 0;
+  unsigned long _LastRun = 0;
+  const uint16_t _Delay = 200; //Read sensors
 };
 class BrightnessSwitch
 {
 public:
-	int setup();
-	int loop();
-	int getOnOff();
+  int setup();
+  int loop();
+  int getOnOff();
 
-	//Varables
+  //Varables
 
 private:
-	void Read();
+  void Read();
 
-	//Varables
-	const uint16_t _Delay = 400;
-	uint8_t _CurrentValue = 1;
-	uint8_t _LastValue = 1;
-	unsigned long _LastRun = 0;
+  //Varables
+  const uint16_t _Delay = 400;
+  uint8_t _CurrentValue = 1;
+  uint8_t _LastValue = 1;
+  unsigned long _LastRun = 0;
 };
 class Lights //Not identical to node.ino light class
 {
 public:
   int setup();
   int loop();
+  Lights(uint8_t pixNum);
   void setNextState(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t red, uint8_t green, uint8_t blue, int d);
   void setModeLight(boolean value, int r, int g, int b);
 private:
   void setLights();
-  void setAll(uint8_t r, uint8_t g, uint8_t b, int pix);
+  void setAll(uint8_t r, uint8_t g, uint8_t b);
   void setBrightness(uint8_t brightness);
-  void rainbow(int pix);
+  void rainbow();
 
 
   uint32_t Wheel(byte WheelPos);
@@ -181,11 +198,14 @@ private:
   uint8_t _Green = 0;
   uint8_t _Blue = 0;
 
+
+  uint8_t _PixNum = 0;
+
   uint16_t _rainbowWheelInput[392];
   uint16_t _rainbowWheelInputSize;
   uint16_t _rainbowLocation = 0;
 
-  Adafruit_NeoPixel strip = Adafruit_NeoPixel(STRIPLENGTH, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+  
   unsigned long _LastRun = 0;
   uint16_t _Delay = 200;
 };
@@ -201,12 +221,27 @@ public:
   int readLastMode();
 
   void setNewCommand();
+  void setBrightness(uint8_t bright);
+
+  
+  uint8_t onOff = 0;
+  uint8_t m = 0;
+  uint8_t brightness = 0;
+  uint8_t r = 0;
+  uint8_t g = 0;
+  uint8_t b = 0;
+  int d = 0;
+
+
+  uint8_t _Brightness = 1;
 
 private:
   void setNextState();
   void writeCurrentMode(byte mode);
 
   boolean newCommand = true;
+
+  
 
   String nodeIpAddress = NODEIPADDRESS;
   const uint8_t _MaxBrightness = 255;
@@ -223,12 +258,28 @@ HeartBeat heartBeat;
 OnOffButton onOffButton;
 ModeButton modeButton;
 BrightnessSwitch brightnessSwitch;
-Lights lights;
+Lights controllerLights(0);
+Lights nodeLights(1);
 Process process;
 
 void HeartBeat::sendHeartbeat()
 {
-  sendHttp(3, 0, 0, 0, 0, 0, 0);
+  sendHttp(process.onOff, process.m, process.brightness, process.r, process.g, process.b, process.d);
+}
+void HeartBeat::recievedHeartbeat()
+{
+  _HeartBeatRecieved = true;
+}
+void HeartBeat::processHeartbeat()
+{
+  if (!_HeartBeatRecieved && !_LastHeartBeatRecieved) //Missed 2 heartbeat messages turn off
+  {
+    nodeLights.setNextState(0, 1, stripBrightness, 0, 0, 0, 5000);
+    //lights.newCommand = true;
+  }
+
+  _LastHeartBeatRecieved = _HeartBeatRecieved;
+  _HeartBeatRecieved = false;
 }
 int HeartBeat::setup()
 {
@@ -239,10 +290,11 @@ int HeartBeat::loop()
   //Serial.println(millis() - _LastRun);
   if ((millis() - _LastRun) >= _Delay)
   {
+    processHeartbeat();
     sendHeartbeat();
     _LastRun = millis();
   }
-
+  
   return 1;
 }
 
@@ -250,263 +302,271 @@ int HeartBeat::loop()
 
 int OnOffButton::setup()
 {
-	pinMode(PIN_ONOFFBUTTON, INPUT_PULLUP);
-	_CurrentValue = digitalRead(PIN_ONOFFBUTTON);
-	return 1;
+  pinMode(PIN_ONOFFBUTTON, INPUT_PULLUP);
+  _CurrentValue = digitalRead(PIN_ONOFFBUTTON);
+  return 1;
 }
 int OnOffButton::loop()
 {
-	if ((millis() - _LastRun) >= _Delay)
-	{
-		Read();
-		_LastRun = millis();
-	}
+  if ((millis() - _LastRun) >= _Delay)
+  {
+    Read();
+    _LastRun = millis();
+  }
 
-	return 1;
+  return 1;
 }
 void OnOffButton::Read()
 {
-	int OnOffValue = digitalRead(PIN_ONOFFBUTTON);
+  int OnOffValue = digitalRead(PIN_ONOFFBUTTON);
 
-	if (OnOffValue == _LastValue && _CurrentValue != OnOffValue)
-	{
-		//Do Work
-		_CurrentValue = OnOffValue; // Set Values before read
-		process.setNewCommand(); //Say new command recieved
-	}
+  if (OnOffValue == _LastValue && _CurrentValue != OnOffValue)
+  {
+    //Do Work
+    _CurrentValue = OnOffValue; // Set Values before read
+    process.setNewCommand(); //Say new command recieved
+  }
 
-	_LastValue = OnOffValue;
+  _LastValue = OnOffValue;
 }
 int OnOffButton::getOnOff()
 {
-	return  _CurrentValue;
+  return  _CurrentValue;
 }
 
 int ModeButton::setup()
 {
-	_ModeCounter = process.readLastMode();
+  _ModeCounter = process.readLastMode();
   //_ModeCounter = 2;
-	pinMode(PIN_MODESELECTBUTTON, INPUT_PULLUP);
+  pinMode(PIN_MODESELECTBUTTON, INPUT_PULLUP);
 
-	return 1;
+  return 1;
 }
 int ModeButton::loop()
 {
-	//Serial.println(millis() - _LastRun);
-	if ((millis() - _LastRun) >= _Delay)
-	{
-		Read();
-		_LastRun = millis();
-	}
+  //Serial.println(millis() - _LastRun);
+  if ((millis() - _LastRun) >= _Delay)
+  {
+    Read();
+    _LastRun = millis();
+  }
 
-	return 1;
+  return 1;
 }
 void ModeButton::Read()
 {
-	int ModeValue = !digitalRead(PIN_MODESELECTBUTTON); //Default is on
+  int ModeValue = !digitalRead(PIN_MODESELECTBUTTON); //Default is on
 
-	if (_LastValue == 1 && ModeValue == 0) //Only trigger when switch is relased
-	{
+  if (_LastValue == 1 && ModeValue == 0) //Only trigger when switch is relased
+  {
 
-		//Do Work
-		_ModeCounter++;
+    //Do Work
+    _ModeCounter++;
     process.setNewCommand(); //Say new command recieved
 
-	}
-	//Serial.println(_ModeCounter);
-	_LastValue = ModeValue;
+  }
+  //Serial.println(_ModeCounter);
+  _LastValue = ModeValue;
 }
 int ModeButton::getMode()
 {
-	/*
-	if (EEPROM.read(storageAddress) != modenumber)
-	{
-		EEPROM.write(storageAddress, modenumber);
-	}
-	*/
-	return  _ModeCounter % NUMOFSTATES; //Number of States in State machine in Lights Class //NUMOFSTATES Var defined at top
+  /*
+  if (EEPROM.read(storageAddress) != modenumber)
+  {
+    EEPROM.write(storageAddress, modenumber);
+  }
+  */
+  return  _ModeCounter % NUMOFSTATES; //Number of States in State machine in Lights Class //NUMOFSTATES Var defined at top
 }
 
 int BrightnessSwitch::setup()
 {
-	pinMode(PIN_BRIGHTNESSSWITCH, INPUT_PULLUP);
-	_CurrentValue = digitalRead(PIN_BRIGHTNESSSWITCH);
-	return 1;
+  pinMode(PIN_BRIGHTNESSSWITCH, INPUT_PULLUP);
+  _CurrentValue = digitalRead(PIN_BRIGHTNESSSWITCH);
+  return 1;
 }
 int BrightnessSwitch::loop()
 {
-	if ((millis() - _LastRun) >= _Delay)
-	{
-		Read();
-		_LastRun = millis();
-	}
+  if ((millis() - _LastRun) >= _Delay)
+  {
+    Read();
+    _LastRun = millis();
+  }
 
-	return 1;
+  return 1;
 }
 void BrightnessSwitch::Read()
 {
-	int BrightnessValue = digitalRead(PIN_BRIGHTNESSSWITCH);
+  int BrightnessValue = digitalRead(PIN_BRIGHTNESSSWITCH);
 
-	if (BrightnessValue == _LastValue && _CurrentValue != BrightnessValue)
-	{
 
-		//Do Work
-		_CurrentValue = BrightnessValue; // Set Values before read
-		//Serial.println("BRIGHTNESS");
-		//Serial.println(_CurrentValue);
-		process.setNewCommand(); //Say new command recieved
+  
+  if (BrightnessValue == _LastValue && _CurrentValue != BrightnessValue)
+  {
 
-	}
-	//Serial.println(OnOffValue);
-	_LastValue = BrightnessValue;
+    //Do Work
+    _CurrentValue = BrightnessValue; // Set Values before read
+    //Serial.println("BRIGHTNESS");
+    //Serial.println(_CurrentValue);
+    process.setBrightness(_CurrentValue);
+    process.setNewCommand(); //Say new command recieved
+
+  }
+  //Serial.println(OnOffValue);
+  _LastValue = BrightnessValue;
 }
 int BrightnessSwitch::getOnOff()
 {
-	return  _CurrentValue;
+  return  _CurrentValue;
 }
 
 
 
 int Process::setup()
 {
-	return 1;
+  return 1;
 }
 int Process::loop()
 {
 
-	if ((millis() - _LastRun) >= _Delay) //check/poll sensor and create msg
-	{
+  if ((millis() - _LastRun) >= _Delay) //check/poll sensor and create msg
+  {
 
-		setNextState();
-		_LastRun = millis();
+    setNextState();
+    _LastRun = millis();
 
-	}
-	return 1;
+  }
+  return 1;
 }
 int Process::readLastMode()
 {
-	//Serial.println("Read EEPROM");
-	//Serial.println((int)EEPROM.read(EEPROMADDRESS));
-	int m = int(EEPROM.read(EEPROMADDRESS)); //EEprom read returns byte. Cast into int so that others can use
-	//yield(500);
-	return m;
+  //Serial.println("Read EEPROM");
+  //Serial.println((int)EEPROM.read(EEPROMADDRESS));
+  int m = int(EEPROM.read(EEPROMADDRESS)); //EEprom read returns byte. Cast into int so that others can use
+  //yield(500);
+  return m;
 
 }
 void Process::writeCurrentMode(byte m)
 {
-	//Serial.println("Write EEPROM");
-	//Serial.println((int)mode);
-	EEPROM.write(EEPROMADDRESS, m); //Eeprom writes bytes
+  //Serial.println("Write EEPROM");
+  //Serial.println((int)mode);
+  EEPROM.write(EEPROMADDRESS, m); //Eeprom writes bytes
   EEPROM.commit();
   //yield(100);
 }
 int Process::getMaxBrightness()
 {
-	return _MaxBrightness;
+  return _MaxBrightness;
 }
 int Process::getMinBrightness()
 {
-	return _MinBrightness;
+  return _MinBrightness;
 }
 void Process::setNewCommand()
 {
   newCommand = true;
 }
+void Process::setBrightness(uint8_t bright)
+{
+  
+  _Brightness = bright;
+}
 void Process::setNextState()
 {
 
-	int modeButtonMode = modeButton.getMode();
+  int modeButtonMode = modeButton.getMode();
 
-	uint8_t onOff = onOffButton.getOnOff();
-	uint8_t m = 0;
-	uint8_t brightness = 0;
-	uint8_t r = 0;
-	uint8_t g = 0;
-	uint8_t b = 0;
-	int d = 0;
+  onOff = onOffButton.getOnOff();
 
-	if (onOff) //Turn on lights
-	{
-		if (brightnessSwitch.getOnOff())  //Set brightness
-		{
-			brightness = _MaxBrightness;
-		}
-		else
-		{
-			brightness = _MinBrightness;
-		}
 
-		switch (modeButtonMode) //State switch depending on mode 
-								//Change num of states varable if num of states is changed
-		{
-			//OnOff, Mode, Brightness, Red, Green, Blue, delay
+  if (onOff) //Turn on lights
+  {
+    if (_Brightness == 1)  //Set brightness
+    {
+      brightness = _MaxBrightness;
+    }
+    else
+    {
+      brightness = _MinBrightness;
+    }
 
-		case 0: //Rainbow All - delay = 75, Rainbow Cycle - delay = 200
-			m = 2;
-			r = 0;
-			g = 0;
-			b = 0;
-			d = 150;
-			break;
-		case 1: //White
-			//Serial.println("White");
-			m = 1;
-			r = 254;
-			g = 254;
-			b = 150;
-			d = 200;
-			break;
-		case 2: //Purple
-			m = 1;
-			r = 180;
-			g = 0;
-			b = 254;
-			d = 200;
-			break;
-		case 3: //Blue
-			m = 1;
-			r = 0;
-			g = 254;
-			b = 0;
-			d = 200;
-			break;
-		}
-	}
-	else // Turn off lights
-	{
-		//Technically if onOff var is 0 all other vals are ignores. Below is not necessary
-		m = 0;
-		r = 0;
-		g = 0;
-		b = 0;
-		d = 8000;
-	}
+    switch (modeButtonMode) //State switch depending on mode 
+                //Change num of states varable if num of states is changed
+    {
+      //OnOff, Mode, Brightness, Red, Green, Blue, delay
+
+    case 0: //Rainbow All - delay = 75, Rainbow Cycle - delay = 200
+      m = 2;
+      r = 0;
+      g = 0;
+      b = 0;
+      d = 150;
+      break;
+    case 1: //White
+      //Serial.println("White");
+      m = 1;
+      r = 254;
+      g = 254;
+      b = 150;
+      d = 200;
+      break;
+    case 2: //Purple
+      m = 1;
+      r = 180;
+      g = 0;
+      b = 254;
+      d = 200;
+      break;
+    case 3: //Blue
+      m = 1;
+      r = 0;
+      g = 254;
+      b = 0;
+      d = 200;
+      break;
+    }
+  }
+  else // Turn off lights
+  {
+    //Technically if onOff var is 0 all other vals are ignores. Below is not necessary
+    m = 0;
+    r = 0;
+    g = 0;
+    b = 0;
+    d = 8000;
+  }
 
   if (newCommand)
   {
-	  lights.setNextState(onOff, m, brightness, r, g, b, d);
+    
     sendHttp(onOff, m, brightness, r, g, b, d);
-      if (readLastMode() != modeButtonMode)  //If last mode and current mode differnt, save to EEProm
+    if ((byte)readLastMode() != (byte)modeButtonMode)  //If last mode and current mode differnt, save to EEProm
     {
-      //writeCurrentMode((byte)modeButtonMode);
+      writeCurrentMode((byte)modeButtonMode);
     }
-    writeCurrentMode((byte)modeButtonMode);
+    //writeCurrentMode((byte)modeButtonMode);
   }
  
-
+  controllerLights.setNextState(onOff, m, stripBrightness, r, g, b, d);
 
   
   newCommand = false;
 
-	//Serial.println(brightnessSwitch.getOnOff());
+  //Serial.println(brightnessSwitch.getOnOff());
 }
 
 
+Lights::Lights(uint8_t pixNum)
+{
+
+  _PixNum = pixNum;
+  
+}
 int Lights::setup()
 {
   pinMode(PIN_NEOPIXEL, OUTPUT);
-  setAll(0, 0, 0, 0);
-  setAll(0, 0, 0, 1);
+  setAll(0, 0, 0);
   //setBrightness(30);
   _rainbowWheelInputSize = (sizeof(_rainbowWheelInput) / sizeof(uint16_t));
   //36-231
@@ -543,13 +603,13 @@ int Lights::loop()
   return 1;
 }
 
-void Lights::rainbow(int pix)
+void Lights::rainbow()
 {
-  int pixNum = 1;
+  int numPix = 1;
   if (_rainbowLocation < (_rainbowWheelInputSize - 1))//rainbow offset
   {
 
-    strip.setPixelColor(pix, Wheel(_rainbowWheelInput[((pixNum * 391 / (STRIPLENGTH-1) + _rainbowLocation) % (_rainbowWheelInputSize - 2))]));
+    strip.setPixelColor(_PixNum, Wheel(_rainbowWheelInput[((numPix * 391 / (STRIPLENGTH-1) + _rainbowLocation) % (_rainbowWheelInputSize - 2))]));
     
     strip.show();
     _rainbowLocation++;
@@ -568,23 +628,23 @@ void Lights::setLights()
     {
       //OnOff, Mode, Brightness, Red, Green, Blue, Delay
     case 0: //Solid Color
-      setAll(_Red, _Green, _Blue, 0);
+      setAll(_Red, _Green, _Blue);
       break;
     case 1: //Solid Color
-      setAll(_Red, _Green, _Blue, 0);
+      setAll(_Red, _Green, _Blue);
       break;
     case 2: //Rainbow Cycle
-      rainbow(0);
+      rainbow();
       break;
     case 3: //Rainbow Cycle
-      rainbow(0);
+      rainbow();
       break;
     }
 
   }
   else //Off
   {
-    setAll(0, 0, 0, 0);
+    setAll(0, 0, 0);
     setBrightness(0);
   }
 }
@@ -601,17 +661,18 @@ void Lights::setNextState(uint8_t onOff, uint8_t m, uint8_t brightness, uint8_t 
   setLights();
   _LastRun = millis();
 }
-void Lights::setAll(uint8_t r, uint8_t g, uint8_t b, int pix)
+void Lights::setAll(uint8_t r, uint8_t g, uint8_t b)
 {
   uint32_t color = strip.Color(r, g, b);
 
-  strip.setPixelColor(pix, color);
+  strip.setPixelColor(_PixNum, color);
   strip.show();
 
 }
 void Lights::setBrightness(uint8_t brightness)
 {
-  strip.setBrightness(brightness);
+  strip.setBrightness(stripBrightness); //Dont Care about waht it should be.
+   
   //strip.show();
 }
 uint32_t Lights::Wheel(byte WheelPos)
@@ -634,10 +695,23 @@ uint32_t Lights::Wheel(byte WheelPos)
 
 void startOTA() 
 { // Start the OTA service
-  delay(5 *1000); //Delay before connecting to wifi to start ota only if STA
+  //delay(5000); //Delay before connecting to wifi to start ota only if STA
   //ArduinoOTA.setPort(8266);
+
+  controllerLights.setNextState(0, 1, stripBrightness, 0, 0, 0, 5000);
+  controllerLights.loop();
+  nodeLights.setNextState(0, 1, stripBrightness, 0, 0, 0, 5000);
+  nodeLights.loop();
+  
   ArduinoOTA.setHostname(OTAName);
   //ArduinoOTA.setPassword(OTAPassword);
+
+  /*
+  ArduinoOTA.onStart([]() 
+  {
+    lights.setNextState(0);
+  });
+  */
 
   ArduinoOTA.begin();
 }
@@ -645,7 +719,7 @@ void startOTA()
 AsyncWebServer server(80);
 void setup()
 {
-  EEPROM.begin(4);
+  EEPROM.begin(4); //4 = size. min is  bytes
   //********** CHANGE PIN FUNCTION  TO GPIO **********
   //GPIO 1 (TX) swap the pin to a GPIO.
   pinMode(1, FUNCTION_3); 
@@ -654,40 +728,167 @@ void setup()
   //**************************************************
 
   WiFi.mode(WIFI_STA);
-  WiFi.config(local_IP, gateway, subnet, dns);
+  WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(APSSID,APPSK); //Connect to WiFi
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) 
+  {
+    //Serial.println("Connection Failed! Rebooting...");
+    delay(10*1000);
+    ESP.restart();
+  }
+  
   //WiFi.begin("W04-006OAKPL","A246801234567890#"); //Connect to WiFi
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", "This is not the website ur looking for");
   });
-    server.on("/onoff", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", String(onOffButton.getOnOff()).c_str());
+  server.on("/onoff", HTTP_GET, [](AsyncWebServerRequest *request){
+  request->send_P(200, "text/html", String(onOffButton.getOnOff()).c_str());
   });
-    server.on("/bright", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", String(brightnessSwitch.getOnOff()).c_str());
+  server.on("/bright", HTTP_GET, [](AsyncWebServerRequest *request){
+  request->send_P(200, "text/html", String(stripBrightness).c_str());
   });
-    server.on("/mode", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/mode", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", String(modeButton.getMode()).c_str());
   });
-server.begin();
+  server.on("/test", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", String(stripBrightness).c_str());
+  });
+
+// Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+  server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    String onoff = "0";
+    String modee = "0";
+    String brightness = "0";
+    String red = "0";
+    String green = "0";
+    String blue = "0";
+    String delayy = "0";
+
+    // GET input1 value on <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+    if (request->hasParam(PARAM_ONOFF) && request->hasParam(PARAM_MODE) && request->hasParam(PARAM_BRIGHTNESS) && request->hasParam(PARAM_RED) && request->hasParam(PARAM_GREEN) && request->hasParam(PARAM_BLUE) && request->hasParam(PARAM_DELAY)) 
+    {
+      onoff = request->getParam(PARAM_ONOFF)->value(); 
+      modee = request->getParam(PARAM_MODE)->value();
+      brightness = request->getParam(PARAM_BRIGHTNESS)->value();
+      red = request->getParam(PARAM_RED)->value();
+      green = request->getParam(PARAM_GREEN)->value();
+      blue = request->getParam(PARAM_BLUE)->value();
+      delayy = request->getParam(PARAM_DELAY)->value();
+      
+      SetStripBrightness(brightness.toInt());
+      //process.setNewCommand();
+      
+      heartBeat.recievedHeartbeat();
+      nodeLights.setNextState(onoff.toInt(),modee.toInt(),stripBrightness,red.toInt(),green.toInt(),blue.toInt(),delayy.toInt());
+      
+      
+      request->send_P(200, "text/html", "OK");
+    }
+  });
+
+
+  // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+  server.on("/time", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    String Bright;
+    String Time;
+    
+    #define PARAM_TIME "TIME"
+    #define PARAM_BRIGHT "BRIGHT"
+
+    // GET input1 value on <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+    if (request->hasParam(PARAM_TIME) | request->hasParam(PARAM_BRIGHT))
+    {
+
+      if (request->hasParam(PARAM_TIME))
+      {
+        Time = request->getParam(PARAM_TIME)->value(); 
+      }
+
+      if (request->hasParam(PARAM_BRIGHT))
+      {
+        Bright = request->getParam(PARAM_BRIGHT)->value();
+
+        process.setBrightness(Bright.toInt());
+        process.setNewCommand(); //Say new command recieved
+      }
+
+      
+      request->send_P(200, "text/html", "OK");
+    }
+    else
+    {
+      request->send_P(200, "text/html", "ERROR");
+    }
+  });
+
+  //1.2.3.2/ota?enable=1
+  server.on("/ota", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    if (request->hasParam(PARAM_OTA))
+    {
+
+        USE_OTA=true;
+        startOTA();
+        request->send(200, "text/plain", "OTA ENABLED");
+      
+    }
+    else
+    {
+      request->send(200, "text/plain", String(USE_OTA).c_str());
+    }
+  });
+
+  server.on("/reset", HTTP_GET, [] (AsyncWebServerRequest *request) 
+  {
+    request->send(200, "text/plain", "TRIGGER RESET OK");
+    yield();
+    ESP.restart();
+  });
+
+
+
+  server.begin();
   
-	onOffButton.setup();
-	modeButton.setup();
-	brightnessSwitch.setup();
-  lights.setup();
-	process.setup();
+  onOffButton.setup();
+  modeButton.setup();
+  brightnessSwitch.setup();
+  controllerLights.setup();
+  nodeLights.setup();
+  process.setup();
   heartBeat.setup();
-  startOTA();
 }
+
+
+
+unsigned long previousWiFiMillis = 0;
+int intervalWiFi = 10 * 1000;
 
 void loop()
 {
-	brightnessSwitch.loop();
-	modeButton.loop();
-	onOffButton.loop();
-  lights.loop();
-	process.loop();
-  heartBeat.loop();
-  ArduinoOTA.handle();                        // listen for OTA events
+  if (USE_OTA)
+  {
+    ArduinoOTA.handle();                        // listen for OTA events
+  }
+  else
+  {
+    brightnessSwitch.loop();
+    modeButton.loop();
+    onOffButton.loop();
+    controllerLights.loop();
+    nodeLights.loop();
+    process.loop();
+    heartBeat.loop();
+  }
+
+  /*
+  // if WiFi is down, try reconnecting every CHECK_WIFI_TIME seconds
+  if ((WiFi.status() != WL_CONNECTED) && (millis() - previousWiFiMillis >=intervalWiFi)) 
+  {
+    ////ESP.restart();
+    previousWiFiMillis = millis();
+  }
+  */
 }
