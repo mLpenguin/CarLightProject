@@ -22,7 +22,7 @@
 //
 //***************************************************************
 //
-//When uploading. Make shure connect to PRIVATE network
+//When uploading. Make sure connect to PRIVATE network
 //
 // Disable windwos firewall
 // Enable NetBIOS over IP? (Just change it triggers something) | IPv4 Config in adapter settings (advanced) | Enable and disable wifi adapter

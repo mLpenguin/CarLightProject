@@ -11,8 +11,8 @@
 //
 //***************************************************************
 //
-//When uploading. Make shure connect to PRIVATE network
+//When uploading. Make sure connect to PRIVATE network
 //
-//Enable NetBIOS over IP
+//Enable NetBIOS over IP?
 //
 //***************************************************************
